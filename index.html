@@ -992,14 +992,15 @@ function renderSSCoord(){
         '<h3 style="font-size:18px;margin:6px 0 2px">Central Campaign Directorate - Bauchi State</h3>'+
         '<div style="color:var(--mut);font-size:13px">Lead: State Coordinator | Mandate: State-wide Strategic Alignment & Multi-tier Execution</div>'+
       '</div>'+
-      '<div style="display:flex;gap:8px">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+        '<span class="ss-badge south">4 Directorate Offices</span>'+
         '<span class="ss-badge green">3 Senatorial Hubs</span>'+
         '<span class="ss-badge blue">20 LGA Desks</span>'+
         '<span class="ss-badge green">323 Ward Officers</span>'+
       '</div>'+
     '</div>'+
   '</div>'+
-  '<div class="ss-grid ss-g3">'+
+  '<div class="ss-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px">'+
     '<div class="ss-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
         '<h3>🏛️ Secretary Office</h3>'+
@@ -1021,7 +1022,7 @@ function renderSSCoord(){
     '</div>'+
     '<div class="ss-card">'+
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
-        '<h3>📡 IT Office</h3>'+
+        '<h3>📡 ICT Office</h3>'+
         '<span class="ss-badge green">Digital Backbone</span>'+
       '</div>'+
       '<p style="font-size:12.5px;color:var(--mut);margin:4px 0 10px">Head: <b>Chief Technology Officer / Digital Lead</b></p>'+
@@ -1054,6 +1055,25 @@ function renderSSCoord(){
         '</ul>'+
         '<div style="font-size:12px;background:var(--sf);padding:6px 8px;border-radius:6px;border:1px solid var(--ln)">'+
           '<b>Field Mobilisation:</b> 6,460 Canvassers Deployed'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="ss-card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+        '<h3>👩‍💼 Office of the Women Leader</h3>'+
+        '<span class="ss-badge south">Women Directorate</span>'+
+      '</div>'+
+      '<p style="font-size:12.5px;color:var(--mut);margin:4px 0 10px">Head: <b>State Women Leader & Directorate Team</b></p>'+
+      '<div style="font-size:13px;line-height:1.45">'+
+        '<b>Core Mandate & Activities:</b>'+
+        '<ul style="margin:6px 0 10px;padding-left:18px;color:var(--mut)">'+
+          '<li><b>Coordinate the Women:</b> Mobilising women voting blocs across Bauchi State</li>'+
+          '<li>Coordination of 20 LGA & 323 Ward Women Mobilisation Desks</li>'+
+          '<li>Women town hall sessions, market dialogues & outreach</li>'+
+          '<li>Voter education, PVC verification & door-to-door peer canvassing</li>'+
+        '</ul>'+
+        '<div style="font-size:12px;background:var(--sf);padding:6px 8px;border-radius:6px;border:1px solid var(--ln)">'+
+          '<b>Mobilisation Reach:</b> 323 Ward Women Coordinators Active'+
         '</div>'+
       '</div>'+
     '</div>'+
