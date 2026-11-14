@@ -579,6 +579,11 @@ var SS_STATE = {
   cmdWard: null,
   cmdPu: null,
   cmdModalOpen: false,
+  wardPuModalOpen: false,
+  wardPuLga: null,
+  wardPuWard: null,
+  wardPuSelectedPu: null,
+  wardExpandedLgas: {},
   cmdModalData: null,
   cmdFeed: null,
   cmdPendingMedia: null,
@@ -623,7 +628,7 @@ var SS_CMD_CHART_LGAS = [
   {n: "Bauchi", d: "Bauchi South", pu: 814, v: 415000}
 ];
 
-function getWardPollingUnits(lgaName, wardName) {
+function getWardPollingUnits(lgaName, wardName, count) {
   var lga = SS_LGAS.find(function(x){ return x.n == lgaName; }) || SS_LGAS[0];
   var venues = [
     "Central Primary School (Unit 01)",
@@ -633,10 +638,14 @@ function getWardPollingUnits(lgaName, wardName) {
     "District / Village Head Palace Square",
     "Government Day Secondary School (East Gate)",
     "Maternity / Child Welfare Centre",
-    "Old Court Premises / Viewing Centre"
+    "Old Court Premises / Viewing Centre",
+    "Emirate Area Court Open Field",
+    "General Hospital Gate Clinic",
+    "Unguwa Central Mosque Square",
+    "Agricultural Development Project Shed"
   ];
-  var agentFirstNames = ["Aminu", "Bello", "Ibrahim", "Musa", "Usman", "Kabiru", "Zainab", "Fatima", "Aisha", "Haruna", "Suleiman", "Maryam"];
-  var agentLastNames = ["Bala", "Gadau", "Kobi", "Azare", "Toro", "Alkaleri", "Ningi", "Misau", "Dass", "Bogoro", "Ganjuwa", "Zaki"];
+  var agentFirstNames = ["Aminu", "Bello", "Ibrahim", "Musa", "Usman", "Kabiru", "Zainab", "Fatima", "Aisha", "Haruna", "Suleiman", "Maryam", "Yusuf", "Mustapha", "Hauwa", "Sa'adatu"];
+  var agentLastNames = ["Bala", "Gadau", "Kobi", "Azare", "Toro", "Alkaleri", "Ningi", "Misau", "Dass", "Bogoro", "Ganjuwa", "Zaki", "Katagum", "Giade", "Warji", "Shira"];
   
   var hash = 0;
   var seedStr = (lgaName||"Bauchi") + (wardName||"Dan'iya");
@@ -646,25 +655,34 @@ function getWardPollingUnits(lgaName, wardName) {
   }
   hash = Math.abs(hash);
 
-  var numPUs = 6;
+  var numPUs = count || 16;
   var pus = [];
   for (var j = 1; j <= numPUs; j++) {
     var vIdx = (hash + j) % venues.length;
     var fnIdx = (hash + j * 3) % agentFirstNames.length;
     var lnIdx = (hash + j * 7) % agentLastNames.length;
     var agentName = agentFirstNames[fnIdx] + " " + agentLastNames[lnIdx];
-    var puNumStr = (j < 10 ? "00" : "0") + j;
+    var puNumStr = (j < 10 ? "00" : (j < 100 ? "0" : "")) + j;
     var puCode = "05/" + ((hash % 20) + 1 < 10 ? "0" : "") + ((hash % 20) + 1) + "/" + ((hash % 15) + 1 < 10 ? "0" : "") + ((hash % 15) + 1) + "/" + puNumStr;
     var voters = 350 + ((hash + j * 47) % 450);
     var phone = "+234 " + (803 + (hash % 60)) + " " + (100 + ((hash + j * 13) % 899)) + " " + (1000 + ((hash + j * 97) % 8999));
-    var supName = "Hon. " + agentFirstNames[(fnIdx + 4) % agentFirstNames.length] + " " + (wardName||"Central");
-    var supPhone = "+234 802 " + (200 + ((hash + 51) % 700)) + " " + (1100 + ((hash + 83) % 8800));
+    
+    // Exactly 4 polling units per supervisor:
+    var clusterIndex = Math.floor((j - 1) / 4) + 1;
+    var supFnIdx = (hash + clusterIndex * 5) % agentFirstNames.length;
+    var supLnIdx = (hash + clusterIndex * 11) % agentLastNames.length;
+    var supName = "Hon. " + agentFirstNames[supFnIdx] + " " + agentLastNames[supLnIdx];
+    var supPhone = "+234 802 " + (200 + ((hash + clusterIndex * 37) % 700)) + " " + (1100 + ((hash + clusterIndex * 83) % 8800));
     var coordPhone = "+234 809 " + (300 + (hash % 600)) + " " + (2200 + (hash % 7700));
 
     pus.push({
       id: "PU-" + (lgaName||"BAU").slice(0,3).toUpperCase() + "-" + puNumStr,
       code: puCode,
+      num: j,
+      puNumStr: puNumStr,
+      clusterIndex: clusterIndex,
       name: "PU " + puNumStr + " - " + venues[vIdx],
+      venue: venues[vIdx] + ", " + (wardName||"Dan'iya") + " Ward, " + lgaName + " LGA",
       lga: lgaName,
       ward: wardName,
       district: lga.d,
@@ -674,6 +692,7 @@ function getWardPollingUnits(lgaName, wardName) {
       agentPhone: phone,
       agentStatus: "On Station • BVAS Synced Nominal",
       supervisor: supName,
+      supervisorRole: "Sector " + clusterIndex + " Supervisor (4 PUs)",
       supervisorPhone: supPhone,
       supervisorStatus: "Sector Oversight Active",
       coordinator: lga.c,
@@ -682,6 +701,319 @@ function getWardPollingUnits(lgaName, wardName) {
     });
   }
   return pus;
+}
+
+
+function openWardPuModal(lgaName, wardName, puId){
+  var lga = lgaName || "Bauchi";
+  var wards = SS_LGA_WARDS_DATA[lga] || ["Dan'iya"];
+  var ward = wardName || wards[0];
+  SS_STATE.wardPuModalOpen = true;
+  SS_STATE.wardPuLga = lga;
+  SS_STATE.wardPuWard = ward;
+  var pus = getWardPollingUnits(lga, ward, 16);
+  SS_STATE.wardPuSelectedPu = puId || (pus[0] ? pus[0].id : null);
+  renderSS();
+}
+
+function closeWardPuModal(){
+  SS_STATE.wardPuModalOpen = false;
+  SS_STATE.wardPuSelectedPu = null;
+  renderSS();
+}
+
+function selectWardModalPu(puId){
+  SS_STATE.wardPuSelectedPu = puId;
+  renderSS();
+}
+
+function switchWardModalLga(lgaName){
+  SS_STATE.wardPuLga = lgaName;
+  var wards = SS_LGA_WARDS_DATA[lgaName] || ["Central Ward"];
+  SS_STATE.wardPuWard = wards[0];
+  var pus = getWardPollingUnits(lgaName, wards[0], 16);
+  SS_STATE.wardPuSelectedPu = pus[0] ? pus[0].id : null;
+  renderSS();
+}
+
+function switchWardModalWard(wardName){
+  SS_STATE.wardPuWard = wardName;
+  var pus = getWardPollingUnits(SS_STATE.wardPuLga, wardName, 16);
+  SS_STATE.wardPuSelectedPu = pus[0] ? pus[0].id : null;
+  renderSS();
+}
+
+function toggleLgaWardBreakdown(lgaName){
+  SS_STATE.wardExpandedLgas = SS_STATE.wardExpandedLgas || {};
+  SS_STATE.wardExpandedLgas[lgaName] = !SS_STATE.wardExpandedLgas[lgaName];
+  var container = document.getElementById("ss-ward-content");
+  if(container) container.innerHTML = getWardContentHtml();
+}
+
+
+function renderDispatchModalHtml(){
+  if(!SS_STATE.cmdModalOpen || !SS_STATE.cmdModalData) return '';
+  var md = SS_STATE.cmdModalData;
+  var feed = SS_STATE.cmdFeed || [];
+  return '<div class="ss-dispatch-modal-overlay" style="z-index:99999" onclick="if(event.target==this)closeDispatchModal()">'+
+    '<div class="ss-dispatch-modal-content">'+
+      '<div class="ss-dispatch-modal-hdr">'+
+        '<h3>📡 SITUATION ROOM DISPATCH & MEDIA CONSOLE</h3>'+
+        '<button type="button" onclick="closeDispatchModal()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">&times;</button>'+
+      '</div>'+
+      '<div style="background:#0e1e2d;border-bottom:1px solid #1a3c58;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
+        '<div>'+
+          '<b style="color:#7fe0ae;font-size:13.5px">'+md.name+'</b> '+
+          '<span style="font-size:11.5px;color:#9fb2bd">('+md.role+' • '+md.puName+')</span>'+
+        '</div>'+
+        '<div class="ss-comm-actions">'+
+          '<a href="tel:'+md.phone.replace(/\s/g,'')+'" class="ss-comm-btn call">📞 Call</a>'+
+          '<a href="sms:'+md.phone.replace(/\s/g,'')+'?body=PBAT%20Situation%20Room:%20Status%20check" class="ss-comm-btn sms">💬 SMS</a>'+
+          '<a href="https://wa.me/'+md.phone.replace(/[^0-9]/g,'')+'" target="_blank" class="ss-comm-btn wa">🌐 WhatsApp</a>'+
+        '</div>'+
+      '</div>'+
+      '<div class="ss-dispatch-feed" id="ss_dispatch_feed_box">'+
+        feed.map(function(item){
+          return '<div class="ss-dispatch-msg '+(item.type=="hq"?"hq":"field")+'">'+
+            '<div class="ss-dispatch-msg-hdr">'+
+              '<b>'+item.sender+'</b>'+
+              '<span>'+item.time+'</span>'+
+            '</div>'+
+            '<div style="margin-bottom:4px"><span class="ss-dispatch-msg-tag">'+item.tag+'</span></div>'+
+            '<div>'+item.text+'</div>'+
+            (item.media ? '<div style="margin-top:6px"><img src="'+item.media+'" style="max-height:120px;border-radius:6px;border:1px solid #1f435e;display:block"></div>' : '')+
+          '</div>';
+        }).join("")+
+      '</div>'+
+      '<div class="ss-dispatch-form">'+
+        '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+          '<select id="ss_dispatch_tag" style="background:#132635;border:1px solid #1f4058;color:#7fe0ae;font-size:11.5px;padding:6px 10px;border-radius:6px;flex:1">'+
+            '<option value="[Routine Status Check]">Routine Status Check</option>'+
+            '<option value="[Turnout Surge]">Turnout Surge Reported</option>'+
+            '<option value="[BVAS Sync Delay]">BVAS Sync Delay</option>'+
+            '<option value="[Logistics Support]">Logistics Support Request</option>'+
+            '<option value="[EC8A Result Sheet Transmitted]">EC8A Result Sheet Transmitted</option>'+
+            '<option value="[Security Cleared]">Security Situation Cleared</option>'+
+          '</select>'+
+          '<label style="background:#172c3d;border:1px solid #204561;color:#9fb2bd;padding:6px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">'+
+            '📷 Attach Photo/Video'+
+            '<input type="file" id="ss_dispatch_file" accept="image/*,video/*" style="display:none" onchange="previewDispatchMedia(this)">'+
+          '</label>'+
+        '</div>'+
+        '<div id="ss_dispatch_preview_wrap"></div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<input type="text" id="ss_dispatch_text" placeholder="Type field dispatch instruction or incident log..." style="flex:1;background:#102231;border:1px solid #1a3c58;color:#fff;padding:8px 12px;border-radius:6px;font-size:12px" onkeydown="if(event.key===\'Enter\')sendDispatchMessage()">'+
+          '<button type="button" class="btn" style="padding:8px 16px;font-size:12px;white-space:nowrap" onclick="sendDispatchMessage()">Transmit Dispatch &rarr;</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function renderWardPuModalHtml(){
+  if(!SS_STATE.wardPuModalOpen) return '';
+  var curLga = SS_STATE.wardPuLga || "Bauchi";
+  var wards = SS_LGA_WARDS_DATA[curLga] || ["Dan'iya"];
+  var curWard = SS_STATE.wardPuWard || wards[0];
+  var lgaObj = SS_LGAS.find(function(x){ return x.n == curLga; }) || SS_LGAS[0];
+  
+  var pus = getWardPollingUnits(curLga, curWard, 16);
+  var selPu = pus.find(function(p){ return p.id == SS_STATE.wardPuSelectedPu; }) || pus[0];
+
+  // Group into clusters of 4
+  var clusters = {};
+  pus.forEach(function(p){
+    if(!clusters[p.clusterIndex]) {
+      clusters[p.clusterIndex] = {
+        index: p.clusterIndex,
+        supervisor: p.supervisor,
+        supervisorPhone: p.supervisorPhone,
+        supervisorRole: p.supervisorRole,
+        supervisorStatus: p.supervisorStatus,
+        pus: []
+      };
+    }
+    clusters[p.clusterIndex].pus.push(p);
+  });
+  var clusterList = Object.values(clusters);
+
+  var html = '<div class="ss-dispatch-modal-overlay" style="z-index:99998" onclick="if(event.target==this)closeWardPuModal()">'+
+    '<div class="ss-dispatch-modal-content" style="max-width:980px;max-height:92vh;width:95%">'+
+      // Header
+      '<div class="ss-dispatch-modal-hdr" style="background:#0e2030;border-bottom:1px solid #1a3c58;padding:12px 18px">'+
+        '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+          '<h3 style="margin:0;font-size:15.5px;color:#fff;display:flex;align-items:center;gap:8px">'+
+            '🗳️ WARDS &rarr; POLLING UNITS &rarr; SUPERVISORS & AGENTS ROSTER'+
+          '</h3>'+
+          '<span class="ss-badge south">4 PUs per Supervisor Cluster</span>'+
+          '<span class="ss-badge green">1 Agent per PU</span>'+
+        '</div>'+
+        '<button type="button" onclick="closeWardPuModal()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1">&times;</button>'+
+      '</div>'+
+
+      // Navigation & Ward Selector Bar
+      '<div style="background:#091520;border-bottom:1px solid #18364e;padding:10px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'+
+        '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">'+
+          '<span style="font-size:12px;color:#8eaabf">Select LGA:</span>'+
+          '<select onchange="switchWardModalLga(this.value)" style="background:#132635;border:1px solid #1f4058;color:#fff;font-size:12px;padding:4px 8px;border-radius:5px">'+
+            SS_LGAS.map(function(l){
+              return '<option value="'+l.n+'" '+(l.n==curLga?'selected':'')+'>'+l.n+' ('+l.d.replace("Bauchi ","")+')</option>';
+            }).join("")+
+          '</select>'+
+          '<span style="font-size:12px;color:#8eaabf;margin-left:6px">Select Ward:</span>'+
+          '<select onchange="switchWardModalWard(this.value)" style="background:#132635;border:1px solid #2d6b99;color:#7fe0ae;font-size:12px;font-weight:700;padding:4px 8px;border-radius:5px">'+
+            wards.map(function(w){
+              return '<option value="'+w+'" '+(w==curWard?'selected':'')+'>'+w+' Ward</option>';
+            }).join("")+
+          '</select>'+
+          '<span class="ss-badge blue">'+lgaObj.d+'</span>'+
+        '</div>'+
+        '<div style="display:flex;gap:8px;font-size:11.5px;color:#9fb2bd;align-items:center">'+
+          '<span><b>'+pus.length+'</b> Polling Units</span> • '+
+          '<span><b>'+clusterList.length+'</b> Supervisors (4:1)</span> • '+
+          '<span><b style="color:#7fe0ae">100%</b> Agents Stationed</span>'+
+        '</div>'+
+      '</div>'+
+
+      // Main Split Body
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;padding:14px 18px;overflow-y:auto;background:#07121b;flex-grow:1">'+
+        // Left Column: 4-to-1 Supervisor Clusters
+        '<div>'+
+          '<div style="font-size:12px;color:#8fa7b8;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+
+            '<b>🛡️ SUPERVISOR CLUSTERS (4 POLLING UNITS EACH)</b>'+
+            '<span style="font-size:11px;color:#7fe0ae">Click any Polling Unit to view Agent &rarr;</span>'+
+          '</div>'+
+          '<div style="display:flex;flex-direction:column;gap:12px">'+
+            clusterList.map(function(cl){
+              return '<div style="background:#0e1d2b;border:1px solid #1a3c58;border-radius:9px;padding:10px 12px">'+
+                '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;flex-wrap:wrap;gap:6px">'+
+                  '<div>'+
+                    '<div style="display:flex;align-items:center;gap:6px">'+
+                      '<span class="ss-cmd-node-badge supervisor" style="font-size:9.5px;padding:1px 6px">Sector '+cl.index+' Supervisor</span>'+
+                      '<b style="font-size:13px;color:#fff">'+cl.supervisor+'</b>'+
+                    '</div>'+
+                    '<div style="font-size:11px;color:#8eaabf;margin-top:2px">'+
+                      'Mobile: <b>'+cl.supervisorPhone+'</b> • Oversight: <b>4 Polling Units</b>'+
+                    '</div>'+
+                  '</div>'+
+                  '<div class="ss-comm-actions">'+
+                    '<a href="tel:'+cl.supervisorPhone.replace(/\s/g,'')+'" class="ss-comm-btn call" title="Call Supervisor" style="padding:2px 6px;font-size:10px">📞 Call</a>'+
+                    '<a href="sms:'+cl.supervisorPhone.replace(/\s/g,'')+'?body=PBAT%20Situation%20Room:%20Supervisor%20Oversight%20for%20Sector%20'+cl.index+'" class="ss-comm-btn sms" title="SMS Supervisor" style="padding:2px 6px;font-size:10px">💬 SMS</a>'+
+                  '</div>'+
+                '</div>'+
+
+                // 4 Polling Units under this Supervisor
+                '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">'+
+                  cl.pus.map(function(pu){
+                    var isSelected = (pu.id === selPu.id);
+                    return '<div onclick="selectWardModalPu(\''+pu.id+'\')" style="background:'+(isSelected?'#133827':'#09131d')+';border:1px solid '+(isSelected?'#4fc48a':'#1c384e')+';border-radius:6px;padding:7px 9px;cursor:pointer;transition:all .15s ease">'+
+                      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">'+
+                        '<b style="font-size:11.5px;color:'+(isSelected?'#88f0be':'#fff')+'">🗳️ Unit '+pu.puNumStr+'</b>'+
+                        '<span style="font-size:9px;color:'+(isSelected?'#7fe0ae':'#8eaabf')+';font-weight:700">PU #'+pu.num+'</span>'+
+                      '</div>'+
+                      '<div style="font-size:10.5px;color:#9fb2bd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+pu.name+'">'+pu.name.replace(/PU \d+ - /,'')+'</div>'+
+                      '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;font-size:10px">'+
+                        '<span style="color:#7fe0ae">👤 '+pu.agent.split(' ')[0]+'</span>'+
+                        '<span style="color:#8fa7b8">'+pu.voters+' voters</span>'+
+                      '</div>'+
+                    '</div>';
+                  }).join("")+
+                '</div>'+
+              '</div>';
+            }).join("")+
+          '</div>'+
+        '</div>'+
+
+        // Right Column: Polling Unit Agent Dossier & All 3 Communication Channels
+        '<div>'+
+          '<div style="font-size:12px;color:#8fa7b8;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'+
+            '<b>👤 ACCREDITED AGENT & DIRECT COMMUNICATION</b>'+
+            '<span class="ss-badge green">'+selPu.agentStatus+'</span>'+
+          '</div>'+
+
+          '<div class="ss-cmd-node-box" style="background:#0e1d2b;border:1px solid #1e4566;border-radius:9px;padding:14px;box-shadow:0 6px 20px rgba(0,0,0,0.4)">'+
+            // PU Details
+            '<div style="border-bottom:1px solid #1a3c58;padding-bottom:10px;margin-bottom:12px">'+
+              '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">'+
+                '<div>'+
+                  '<b style="font-size:15px;color:#fff;display:flex;align-items:center;gap:6px">🗳️ '+selPu.name+'</b>'+
+                  '<div style="font-size:11.5px;color:#7fe0ae;margin-top:2px">INEC Official Code: <b>'+selPu.code+'</b></div>'+
+                '</div>'+
+                '<span class="ss-badge south" style="font-size:10px">Sector '+selPu.clusterIndex+' Cluster</span>'+
+              '</div>'+
+              '<div style="font-size:11.5px;color:#9fb2bd;margin-top:6px;line-height:1.45">'+
+                '📍 <b>Contact Address / Venue:</b><br>'+
+                '<span style="color:#d8e6ef">'+selPu.venue+'</span>'+
+              '</div>'+
+              '<div style="display:flex;gap:12px;margin-top:6px;font-size:11px;color:#8fa7b8">'+
+                '<span>👥 Registered Voters: <b style="color:#fff">'+selPu.voters+'</b></span>'+
+                '<span>🗳️ Ward: <b style="color:#fff">'+selPu.ward+'</b></span>'+
+                '<span>🏛️ LGA: <b style="color:#fff">'+selPu.lga+'</b></span>'+
+              '</div>'+
+            '</div>'+
+
+            // Agent Profile
+            '<div style="background:#08131e;border:1px solid #16364d;border-radius:8px;padding:12px;margin-bottom:14px">'+
+              '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+                '<div>'+
+                  '<span class="ss-cmd-node-badge agent" style="font-size:9.5px;padding:2px 7px">Field Lead • Polling Unit Agent</span>'+
+                  '<div style="font-size:16px;font-weight:800;color:#fff;margin:4px 0 2px">'+selPu.agent+'</div>'+
+                  '<div style="font-size:11.5px;color:#9fb2bd">Accreditation ID: <b style="color:#7fe0ae">'+selPu.agentCode+'</b></div>'+
+                  '<div style="font-size:11.5px;color:#9fb2bd">Direct Phone: <b style="color:#fff">'+selPu.agentPhone+'</b></div>'+
+                '</div>'+
+                '<div style="text-align:right">'+
+                  '<span style="display:inline-block;background:rgba(79,196,138,0.15);color:#7fe0ae;font-size:10.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid rgba(79,196,138,0.3)">BVAS Verified Nominal</span>'+
+                  '<div style="font-size:10px;color:#8eaabf;margin-top:4px">Reports to Sector '+selPu.clusterIndex+' Supervisor</div>'+
+                '</div>'+
+              '</div>'+
+            '</div>'+
+
+            // 3 Specified Communication Channels
+            '<div style="margin-bottom:12px">'+
+              '<div style="font-size:11.5px;font-weight:700;color:#8fa7b8;margin-bottom:6px">DIRECT AGENT COMMUNICATION (3 CHANNELS):</div>'+
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'+
+                '<a href="tel:'+selPu.agentPhone.replace(/\s/g,'')+'" class="ss-comm-btn call" style="justify-content:center;padding:8px 10px;font-size:12px">'+
+                  '📞 1. Voice Call'+
+                '</a>'+
+                '<a href="sms:'+selPu.agentPhone.replace(/\s/g,'')+'?body=PBAT%20Situation%20Room:%20Status%20report%20request%20for%20'+encodeURIComponent(selPu.name)+'" class="ss-comm-btn sms" style="justify-content:center;padding:8px 10px;font-size:12px">'+
+                  '💬 2. SMS Text Message'+
+                '</a>'+
+              '</div>'+
+              '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">'+
+                '<button type="button" class="ss-comm-btn dispatch" style="justify-content:center;padding:8px 10px;font-size:12px" onclick="openDispatchModal(\''+selPu.agent+'\', \'Polling Unit Agent\', \''+selPu.agentPhone+'\', \''+selPu.name+'\', \''+selPu.code+'\')">'+
+                  '🌐 3. Internet Calling / Dispatch'+
+                '</button>'+
+                '<a href="https://wa.me/'+selPu.agentPhone.replace(/[^0-9]/g,'')+'" target="_blank" class="ss-comm-btn wa" style="justify-content:center;padding:8px 10px;font-size:12px">'+
+                  '📱 WhatsApp Direct'+
+                '</a>'+
+              '</div>'+
+            '</div>'+
+
+            // Supervisor Link
+            '<div style="background:#091622;border:1px dashed #1a3d59;border-radius:7px;padding:9px 12px;margin-top:10px">'+
+              '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'+
+                '<div>'+
+                  '<div style="font-size:10.5px;color:#8fa7b8">ASSIGNED SUPERVISOR (4:1 CLUSTER):</div>'+
+                  '<b style="font-size:12px;color:#d8e6ef">'+selPu.supervisor+' ('+selPu.supervisorRole+')</b>'+
+                '</div>'+
+                '<div class="ss-comm-actions">'+
+                  '<a href="tel:'+selPu.supervisorPhone.replace(/\s/g,'')+'" class="ss-comm-btn call" style="padding:2px 7px;font-size:10.5px">📞 Call Supervisor</a>'+
+                  '<a href="sms:'+selPu.supervisorPhone.replace(/\s/g,'')+'?body=PBAT%20Situation%20Room:%20Sector%20Check" class="ss-comm-btn sms" style="padding:2px 7px;font-size:10.5px">💬 SMS</a>'+
+                '</div>'+
+              '</div>'+
+            '</div>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+
+      // Footer
+      '<div style="background:#0a1520;border-top:1px solid #18364e;padding:10px 18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;font-size:11px;color:#8fa7b8">'+
+        '<div><b>Supervisory Protocol:</b> 4 Polling Units are assigned to 1 Sector Supervisor. Every unit has a dedicated, accredited polling agent with live two-way communications.</div>'+
+        '<button class="btn" onclick="closeWardPuModal()" style="padding:4px 14px;font-size:11px">Close Roster</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+  return html;
 }
 
 function selectCmdHub(hub){
@@ -1147,12 +1479,14 @@ function getWardContentHtml(){
     var filteredLgas = SS_LGAS.filter(function(l){
       if(!SS_STATE.wardSearch) return true;
       var q = SS_STATE.wardSearch;
-      return l.n.toLowerCase().indexOf(q)>-1 || l.d.toLowerCase().indexOf(q)>-1 || (l.c && l.c.toLowerCase().indexOf(q)>-1);
+      var wardList = SS_LGA_WARDS_DATA[l.n] || [];
+      var wardMatch = wardList.some(function(w){ return w.toLowerCase().indexOf(q) > -1; });
+      return l.n.toLowerCase().indexOf(q)>-1 || l.d.toLowerCase().indexOf(q)>-1 || (l.c && l.c.toLowerCase().indexOf(q)>-1) || wardMatch;
     });
 
     html += '<div class="ss-card" style="margin-bottom:12px;background:linear-gradient(135deg,rgba(27,122,75,0.08),rgba(18,40,58,0.06))">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'+
-        '<div><b>323 State Registration Areas (Wards)</b> - Full grassroots coverage across Bauchi\'s 20 Local Government Areas.</div>'+
+        '<div><b>323 State Registration Areas (Wards)</b> - Grassroots coverage across Bauchi\'s 20 LGAs. <b>Click any Polling Unit</b> to view 4:1 Supervisor & Agent roster.</div>'+
         '<div style="display:flex;gap:6px">'+
           '<span class="ss-badge south">110 South Wards</span>'+
           '<span class="ss-badge central">105 Central Wards</span>'+
@@ -1160,20 +1494,38 @@ function getWardContentHtml(){
         '</div>'+
       '</div>'+
     '</div>'+
-    '<div class="gw" style="max-height:420px;overflow-y:auto;border:1px solid var(--ln);border-radius:8px">'+
+    '<div class="gw" style="max-height:440px;overflow-y:auto;border:1px solid var(--ln);border-radius:8px">'+
       '<table>'+
-        '<tr><th class="l">LGA</th><th>Senatorial District</th><th>State Wards</th><th>Polling Units</th><th>Coordinator / Liaison</th><th>Status</th><th>Command Sync</th></tr>'+
+        '<tr><th class="l">LGA</th><th>Senatorial District</th><th>State Wards</th><th>Polling Units (Click to Inspect)</th><th>Coordinator / Liaison</th><th>Status</th><th>Command Sync</th></tr>'+
         (filteredLgas.length ? filteredLgas.map(function(l){
-          return '<tr>'+
+          var isExpanded = SS_STATE.wardExpandedLgas && SS_STATE.wardExpandedLgas[l.n];
+          var wardList = SS_LGA_WARDS_DATA[l.n] || [];
+          var rows = '<tr>'+
             '<td class="l"><b>'+l.n+'</b></td>'+
             '<td>'+l.d+'</td>'+
-            '<td><b>'+l.w+' Wards</b></td>'+
-            '<td>'+l.pu+' PUs</td>'+
+            '<td><button class="chip" style="margin:0;padding:2px 7px;font-size:10.5px;cursor:pointer" onclick="toggleLgaWardBreakdown(\''+l.n+'\')"><b>'+l.w+' Wards</b> '+(isExpanded?'▲':'▼')+'</button></td>'+
+            '<td><button class="btn" style="padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#152c3e;border-color:#2a577c;color:#7fe0ae;cursor:pointer" onclick="openWardPuModal(\''+l.n+'\')">🗳️ '+l.pu+' PUs &rarr;</button></td>'+
             '<td class="l">'+l.c+'</td>'+
             '<td><span class="pill c1">'+l.st+'</span></td>'+
             '<td><button class="btn" style="padding:2px 7px;font-size:10.5px" onclick="jumpToCmdLga(\''+l.n+'\')">📡 Sync</button></td>'+
           '</tr>';
-        }).join("") : '<tr><td colspan="6" style="text-align:center;padding:16px;color:var(--mut)">No matching wards or LGAs found</td></tr>')+
+
+          if(isExpanded){
+            rows += '<tr style="background:#08141f"><td colspan="7" style="padding:10px 14px">'+
+              '<div style="font-size:11.5px;color:#8fa7b8;margin-bottom:6px"><b>'+l.n+' State Wards Directory ('+wardList.length+' Registration Areas):</b> Click any ward\'s Polling Units to open the 4:1 Supervisor & Agent roster modal:</div>'+
+              '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:6px">'+
+                wardList.map(function(w, wIdx){
+                  var puEst = Math.round(l.pu / wardList.length);
+                  return '<div style="background:#0f2231;border:1px solid #1a3c58;border-radius:5px;padding:6px 8px;display:flex;justify-content:space-between;align-items:center">'+
+                    '<div><b style="color:#fff;font-size:11px">'+(wIdx+1)+'. '+w+'</b><div style="font-size:9.5px;color:#8eaabf">'+puEst+' PUs • '+Math.ceil(puEst/4)+' Supervisors</div></div>'+
+                    '<button class="btn" style="padding:2px 6px;font-size:10px" onclick="openWardPuModal(\''+l.n+'\', \''+w.replace(/'/g,"\\'")+'\')">🗳️ PUs</button>'+
+                  '</div>';
+                }).join("")+
+              '</div>'+
+            '</td></tr>';
+          }
+          return rows;
+        }).join("") : '<tr><td colspan="7" style="text-align:center;padding:16px;color:var(--mut)">No matching wards or LGAs found</td></tr>')+
       '</table>'+
     '</div>';
   } else {
@@ -1185,22 +1537,23 @@ function getWardContentHtml(){
 
     html += '<div class="ss-card" style="margin-bottom:12px;background:linear-gradient(135deg,rgba(31,95,153,0.08),rgba(18,40,58,0.06))">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">'+
-        '<div><b>212 Federal Electoral Wards</b> - Partitioned across Bauchi State\'s 12 Federal Constituencies.</div>'+
+        '<div><b>212 Federal Electoral Wards</b> - Partitioned across Bauchi State\'s 12 Federal Constituencies. Click any Polling Units column to inspect agents.</div>'+
         '<div style="display:flex;gap:6px">'+
           '<span class="ss-badge blue">12 Federal Constituencies</span>'+
           '<span class="ss-badge green">212 Wards Total</span>'+
         '</div>'+
       '</div>'+
     '</div>'+
-    '<div class="gw" style="max-height:420px;overflow-y:auto;border:1px solid var(--ln);border-radius:8px">'+
+    '<div class="gw" style="max-height:440px;overflow-y:auto;border:1px solid var(--ln);border-radius:8px">'+
       '<table>'+
         '<tr><th class="l">Federal Constituency</th><th class="l">Constituent LGAs</th><th>Federal Wards</th><th>Polling Units</th><th>Registered Voters</th><th class="l">Representative Liaison</th></tr>'+
         (filteredFed.length ? filteredFed.map(function(f){
+          var firstLga = f.lgas.split(',')[0].trim();
           return '<tr>'+
             '<td class="l"><b>'+f.n+'</b></td>'+
             '<td class="l">'+f.lgas+'</td>'+
             '<td><b>'+f.w+' Fed Wards</b></td>'+
-            '<td>'+f.pu+' PUs</td>'+
+            '<td><button class="btn" style="padding:3px 9px;font-size:11px;font-weight:700;display:inline-flex;align-items:center;gap:4px;background:#152c3e;border-color:#2a577c;color:#7fe0ae;cursor:pointer" onclick="openWardPuModal(\''+firstLga+'\')">🗳️ '+f.pu+' PUs &rarr;</button></td>'+
             '<td>'+f.v.toLocaleString()+'</td>'+
             '<td class="l">'+f.rep+'</td>'+
           '</tr>';
@@ -1589,65 +1942,6 @@ function renderSSCmd(){
     '<button class="btn" style="padding:4px 10px;font-size:11px" onclick="document.getElementById(\'ss_cmd_ticker_text\').textContent=\'Refreshed at \'+new Date().toLocaleTimeString()+\' - All 20 LGA situation desks synchronized nominal.\'">Refresh Feeds</button>'+
   '</div>';
 
-  // Dispatch Modal overlay if open
-  if(SS_STATE.cmdModalOpen && SS_STATE.cmdModalData){
-    var md = SS_STATE.cmdModalData;
-    var feed = SS_STATE.cmdFeed || [];
-    html += '<div class="ss-dispatch-modal-overlay" onclick="if(event.target==this)closeDispatchModal()">'+
-      '<div class="ss-dispatch-modal-content">'+
-        '<div class="ss-dispatch-modal-hdr">'+
-          '<h3>📡 SITUATION ROOM DISPATCH & MEDIA CONSOLE</h3>'+
-          '<button type="button" onclick="closeDispatchModal()" style="background:none;border:none;color:#fff;font-size:18px;cursor:pointer">&times;</button>'+
-        '</div>'+
-        '<div style="background:#0e1e2d;border-bottom:1px solid #1a3c58;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">'+
-          '<div>'+
-            '<b style="color:#7fe0ae;font-size:13.5px">'+md.name+'</b> '+
-            '<span style="font-size:11.5px;color:#9fb2bd">('+md.role+' • '+md.puName+')</span>'+
-          '</div>'+
-          '<div class="ss-comm-actions">'+
-            '<a href="tel:'+md.phone.replace(/\s/g,'')+'" class="ss-comm-btn call">📞 Call</a>'+
-            '<a href="sms:'+md.phone.replace(/\s/g,'')+'" class="ss-comm-btn sms">💬 SMS</a>'+
-            '<a href="https://wa.me/'+md.phone.replace(/[^0-9]/g,'')+'" target="_blank" class="ss-comm-btn wa">🌐 WhatsApp</a>'+
-          '</div>'+
-        '</div>'+
-        '<div class="ss-dispatch-feed" id="ss_dispatch_feed_box">'+
-          feed.map(function(item){
-            return '<div class="ss-dispatch-msg '+(item.type=="hq"?"hq":"field")+'">'+
-              '<div class="ss-dispatch-msg-hdr">'+
-                '<b>'+item.sender+'</b>'+
-                '<span>'+item.time+'</span>'+
-              '</div>'+
-              '<div style="margin-bottom:4px"><span class="ss-dispatch-msg-tag">'+item.tag+'</span></div>'+
-              '<div>'+item.text+'</div>'+
-              (item.media ? '<div style="margin-top:6px"><img src="'+item.media+'" style="max-height:120px;border-radius:6px;border:1px solid #1f435e;display:block"></div>' : '')+
-            '</div>';
-          }).join("")+
-        '</div>'+
-        '<div class="ss-dispatch-form">'+
-          '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
-            '<select id="ss_dispatch_tag" style="background:#132635;border:1px solid #1f4058;color:#7fe0ae;font-size:11.5px;padding:6px 10px;border-radius:6px;flex:1">'+
-              '<option value="[Routine Status Check]">Routine Status Check</option>'+
-              '<option value="[Turnout Surge]">Turnout Surge Reported</option>'+
-              '<option value="[BVAS Sync Delay]">BVAS Sync Delay</option>'+
-              '<option value="[Logistics Support]">Logistics Support Request</option>'+
-              '<option value="[EC8A Result Sheet Transmitted]">EC8A Result Sheet Transmitted</option>'+
-              '<option value="[Security Cleared]">Security Situation Cleared</option>'+
-            '</select>'+
-            '<label style="background:#172c3d;border:1px solid #204561;color:#9fb2bd;padding:6px 10px;border-radius:6px;font-size:11.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">'+
-              '📷 Attach Photo/Video'+
-              '<input type="file" id="ss_dispatch_file" accept="image/*,video/*" style="display:none" onchange="previewDispatchMedia(this)">'+
-            '</label>'+
-          '</div>'+
-          '<div id="ss_dispatch_preview_wrap"></div>'+
-          '<div style="display:flex;gap:8px">'+
-            '<input type="text" id="ss_dispatch_text" placeholder="Type field dispatch instruction or incident log..." style="flex:1;background:#102231;border:1px solid #1a3c58;color:#fff;padding:8px 12px;border-radius:6px;font-size:12px" onkeydown="if(event.key===\'Enter\')sendDispatchMessage()">'+
-            '<button type="button" class="btn" style="padding:8px 16px;font-size:12px;white-space:nowrap" onclick="sendDispatchMessage()">Transmit Dispatch &rarr;</button>'+
-          '</div>'+
-        '</div>'+
-      '</div>'+
-    '</div>';
-  }
-
   html += '</div>';
   return html;
 }
@@ -1841,6 +2135,13 @@ function renderSS(){
   }
 
   html += '</div>';
+  
+  if(SS_STATE.wardPuModalOpen){
+    html += renderWardPuModalHtml();
+  }
+  if(SS_STATE.cmdModalOpen){
+    html += renderDispatchModalHtml();
+  }
   mount.innerHTML = html;
 
   if(focusedId){
